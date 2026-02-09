@@ -22,7 +22,7 @@ def fetch_ohlcv_df(exchange, symbol, timeframe, start, end):
     return df.loc[start:end]
 
 def moex_fetch_ohlcv_df(ticker, timeframe, start, end, board="TQBR"):
-    tf = {"1m":1, "5m":5, "10m":10, "15m":15, "30m":30, "1h":60, "2h":120, "4h":240, "1d":1440}
+    tf = {"1m": 1, "10m": 10, "1h": 60, "1d": 24, "1w": 7, "1M": 31, "1Q": 4}
     interval = tf[timeframe]
 
     url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/{board}/securities/{ticker}/candles.json"
