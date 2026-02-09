@@ -48,7 +48,8 @@ def search_for_solutions(
     returns: pd.Series,
     cov: pd.DataFrame,
     risk: float | None = None,
-    target_return: float | None = None
+    target_return: float | None = None,
+    sharpe: bool = False
 ):
     tickers = returns.index
     r = returns.values.astype(float)
@@ -59,37 +60,39 @@ def search_for_solutions(
     bounds = [(0.0, 1.0)] * n
     cons = [{"type": "eq", "fun": lambda w: np.sum(w) - 1.0}]
 
-    # 4) Минимальный риск при заданной доходности (target_return)
-    if target_return is not None:
+    # ====== ПОРТФЕЛЬ ШАРПА ======
+    if sharpe:
+        obj = lambda w: -(w @ r) / np.sqrt(max(w.T @ C @ w, 1e-12))
+
+    # ====== MIN RISK при target return ======
+    elif target_return is not None:
         cons.append({"type": "eq", "fun": lambda w: (w @ r) - target_return})
         obj = lambda w: (w.T @ C @ w)
 
-    # 1) Минимальный риск (GMV)
+    # ====== GMV ======
     elif risk is None:
         obj = lambda w: (w.T @ C @ w)
 
-    # 2) Макс. доходность при заданном риске (vol <= risk) или
-    # 3) Макс. доходность без ограничения по риску (risk == 1)
+    # ====== MAX RETURN при risk или без ======
     else:
         obj = lambda w: -(w @ r)
         if risk != 1:
-            if risk <= 0:
-                raise ValueError("risk должен быть > 0, либо risk=1 для max return без ограничений")
-            cons.append({"type": "ineq", "fun": lambda w: risk - np.sqrt(max(w.T @ C @ w, 0.0))})
+            cons.append({"type": "ineq", "fun": lambda w: risk - np.sqrt(w.T @ C @ w)})
 
     res = minimize(obj, w0, method="SLSQP", bounds=bounds, constraints=cons,
                    options={"maxiter": 2000, "ftol": 1e-12})
 
     if not res.success:
-        raise RuntimeError("risk слишком мал или target_return недостижим при long-only.")
+        raise RuntimeError("Оптимизация не сошлась")
 
     w = res.x
-    w[np.abs(w) < 1e-10] = 0.0
-    w = w / w.sum()
+    w[w < 1e-10] = 0
+    w /= w.sum()
 
     var = float(w.T @ C @ w)
     return {
         "weights": pd.Series(w, index=tickers),
-        "portfolio_risk": float(np.sqrt(max(var, 0.0))),
         "portfolio_return": float(w @ r),
+        "portfolio_risk": float(np.sqrt(var)),
+        "sharpe": float((w @ r) / np.sqrt(var))
     }
